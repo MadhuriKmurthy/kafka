@@ -1,0 +1,117 @@
+STEPS in Ubuntu:
+
+1. Install Java 11 and set the PATH
+2. Download the latest version of Apache Kafka from https://kafka.apache.org/downloads under Binary downloads (tgz file), then extract
+3. Run command:  nano ~/.bashrc  and enter the kafka path in the last line of file PATH="$PATH:~/kafka_2.13-3.5.0/bin"
+4. Check:  kafka-topics.sh
+
+Steps to start kafka with zookeeper::
+5. Start Zookeeper:  zookeeper-server-start.sh ~/kafka_2.13-3.5.1/config/zookeeper.properties
+6. Start Apache Kafka: kafka-server-start.sh ~/kafka_2.13-3.5.1/config/server.properties
+
+Steps to start kafka in KRaft mode (no zookeeper)::
+5. Generate a random UUID:  kafka-storage.sh random-uuid
+6. Format your storage directory: kafka-storage.sh format -t <uuid> -c ~/kafka_2.13-3.5.1/config/kraft/server.properties
+7. Start Apache Kafka: kafka-server-start.sh ~/kafka_2.13-3.5.1/config/kraft/server.properties
+
+
+Kafka Topics Command Line Interface (CLI)
+
+A. create/list/describe/delete topics in kafka(kafka-topics.sh)
+
+
+kafka-topics.sh --bootstrap-server localhost:9092 --create --topic first_topic
+
+kafka-topics.sh --bootstrap-server localhost:9092 --create --topic second_topic --partitions 5
+
+kafka-topics.sh --bootstrap-server localhost:9092 --create --topic third_topic --replication-factor 3   == this will give a error in localhost saying replication factor cannot be 3 because there is only 1 broker created in localhost and rf should be <= broker
+
+kafka-topics.sh --bootstrap-server localhost:9092 --create --topic third_topic --replication-factor 1
+
+kafka-topics.sh --bootstrap-server localhost:9092 --list
+
+kafka-topics.sh --bootstrap-server localhost:9092 --topic second_topic --describe
+
+kafka-topics.sh --bootstrap-server localhost:9092 --topic first_topic --delete
+
+B. Create producers without keys and with keys(kafka-console-producer.sh)
+
+kafka-console-producer.sh --bootstrap-server localhost:9092 --topic first_topic
+> your message1
+> your message 2
+> control-C
+
+#with producer properties
+kafka-console-producer.sh --bootstrap-server localhost:9092 --topic first_topic --producer-property acks=all
+> your message 1
+> your message 2
+>control-C
+
+acks=0
+When acks=0 producers consider messages as "written successfully" the moment the message was sent without waiting for the broker to accept it at all.This 'fire-and-forget' approach is only useful for scenarios where it is OK to potentially lose messages or data.
+If the broker goes offline or an exception happens, we won’t know and will lose data. This is useful for data where it’s okay to potentially lose messages, such as metrics collection, and produces the highest throughput setting because the network overhead is minimized.
+
+acks = 1
+When acks=1 , producers consider messages as "written successfully" when the message was acknowledged by only the leader. The message receipt is only a
+cknowledged by the leader in the Kafka replication setup. Leader response is requested, but replication is not a guarantee as it happens in the background. If an ack is not received, the producer may retry the request. If the leader broker goes offline unexpectedly but replicas haven’t replicated the data yet, we have a data loss.
+
+acks = all
+When acks=all, producers consider messages as "written successfully" when the message is accepted by all in-sync replicas (ISR).
+
+#producing to a topic that does not exists? Ideally, it should not be allowed, but in localhost it will create a new topic. It is based on the cluster.
+
+#producing with keys
+kafka-console-producer.sh --bootstrap-server localhost:9092 --topic first_topic --property parse.key=true --property key.separator=:
+
+
+
+#Consuming
+
+# from beginning
+kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic first_topic --from-beginning
+
+
+
+#Creating consumer groups
+Step 1: Create a topic with at least 3 partitions and send data to it
+kafka-topics.sh --bootstrap-server localhost:9092 --topic first_topic --create --partitions 3 --replication-factor 1
+
+Step 2:Create a first kafka-console-consumer and assign a group name with --group
+kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic first_topic --group consumer-group-app-1 
+
+Step 3: Open a new terminal/shell window and launch a second consumer in the same consumer group consumer-group-app-1 (note we're using the exact same command)
+kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic first_topic --group consumer-group-app-1
+
+Step 4: Open a new terminal/shell window and launch a third consumer in the same consumer group consumer-group-app-1
+kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic first_topic --group consumer-group-app-1
+
+Each consumer in the consumer group consumer-group-app-1 will get assigned a partition. 
+
+Step 5: Produce a few string messages in the topic. 
+kafka-console-producer.sh --bootstrap-server localhost:9092 --topic first_topic
+
+
+#Resetting the offset
+# reset the offsets to the beginning of each partition
+kafka-consumer-groups.sh --bootstrap-server localhost:9092 --group my-first-application --reset-offsets --to-earliest
+
+# execute flag is needed
+kafka-consumer-groups.sh --bootstrap-server localhost:9092 --group my-first-application --reset-offsets --to-earliest --execute
+
+# topic flag is also needed
+kafka-consumer-groups.sh --bootstrap-server localhost:9092 --group my-first-application --reset-offsets --to-earliest --execute --topic first_topic
+
+# consume from where the offsets have been reset
+kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic first_topic --group my-first-application
+
+# describe the group again
+kafka-consumer-groups.sh --bootstrap-server localhost:9092 --describe --group my-first-application
+
+# shift offsets by 2 (forward) as another strategy
+kafka-consumer-groups.sh --bootstrap-server localhost:9092 --group my-first-application --reset-offsets --shift-by 2 --execute --topic first_topic
+
+# shift offsets by 2 (backward) as another strategy
+kafka-consumer-groups.sh --bootstrap-server localhost:9092 --group my-first-application --reset-offsets --shift-by -2 --execute --topic first_topic
+
+# consume again
+kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic first_topic --group my-first-application
